@@ -96,7 +96,8 @@ body {
     gap: 15px;
 }
 
-.content-card {
+/* CLASE CORREGIDA: .content-item (antes .content-card) */
+.content-item { 
     background: #fff;
     border-radius: 8px;
     display: flex;
@@ -106,11 +107,12 @@ body {
     transition: transform 0.2s;
 }
 
-.content-card:hover {
+.content-item:hover {
     transform: translateY(-2px);
 }
 
-.card-image {
+/* CLASE CORREGIDA: .content-image-box (antes .card-image) */
+.content-image-box { 
     width: 80px;
     height: 120px;
     overflow: hidden;
@@ -119,7 +121,7 @@ body {
     flex-shrink: 0;
 }
 
-.card-image img {
+.content-image-box img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -351,7 +353,7 @@ body {
 
 /*
 =================================================
-             --- RESPONSIVE (CORREGIDO) ---
+             --- RESPONSIVE (CORREGIDO FINALMENTE) ---
 =================================================
 */
 @media (max-width: 768px) {
@@ -365,21 +367,25 @@ body {
         flex-wrap: wrap;
         gap: 10px;
     }
-    .content-card {
+    
+    /* CLASE CORREGIDA: .content-item (antes .content-card) */
+    .content-item {
         flex-direction: column;
         text-align: center;
-        /* CRÍTICO: Alinea los ítems de la tarjeta (imagen, texto) al centro */
         align-items: center; 
     }
-    .card-image {
-        /* CRÍTICO: Se establece un ancho fijo más pequeño en móvil */
+    
+    /* CLASE CORREGIDA: .content-image-box (antes .card-image) */
+    .content-image-box { 
+        /* TAMAÑO FIJO EN MÓVIL (150x225) */
         width: 150px; 
-        height: 225px; /* Proporcional (150x225 es 2:3) */
+        height: 225px; 
         max-height: 250px;
         margin-right: 0;
         margin-bottom: 10px;
         margin: 0 auto 10px auto; /* Centra la imagen */
     }
+    
     .card-actions {
         justify-content: center;
     }
