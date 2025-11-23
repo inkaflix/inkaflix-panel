@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="admin-header">
+        <h1>ADMIN Panel de Contenido</h1>
+        <div class="header-actions">
+            <button class="btn primary" onclick="showContentModal()">Nuevo Contenido</button>
+            <button class="btn secondary" onclick="loadContent()">Refrescar</button>
+            <button class="btn danger" onclick="logout()">Cerrar Sesión</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="filters">
+            <input type="text" id="searchTitle" placeholder="Buscar por Título o Género...">
+            <select id="typeFilter">
+                <option value="">Tipo: Todos</option>
+                <option value="Serie">Serie</option>
+                <option value="Película">Película</option>
+            </select>
+            <button class="btn primary" onclick="loadContent()">Filtrar</button>
+        </div>
+
+        <div id="contentList" class="content-list">
+            </div>
+        
+        <div id="paginationControls" class="pagination-controls">
+            </div>
+    </div>
+
+    <div id="contentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('contentModal')">&times;</span>
+            <h2 id="modalTitle">Nuevo Contenido</h2>
+            <form id="contentForm">
+                <input type="hidden" id="contentId">
+                
+                <div class="input-group">
+                    <label for="tmdbType">Tipo de Contenido (TMDb)</label>
+                    <select id="tmdbType" required>
+                        <option value="movie">Película</option>
+                        <option value="tv">Serie</option>
+                    </select>
+                </div>
+                <div class="input-group tmdb-lookup">
+                    <label for="tmdbId">ID de TMDb (Ej: 635237)</label>
+                    <div class="tmdb-input-row">
+                        <input type="number" id="tmdbId" placeholder="Introduce el ID de TMDb" required>
+                        <button type="button" class="btn primary small" onclick="fetchTmdbData()">Buscar y Rellenar</button>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="titulo">Título</label>
+                    <input type="text" id="titulo" required readonly>
+                </div>
+
+                <div class="input-group">
+                    <label for="genresDisplay">Géneros (TMDb)</label>
+                    <input type="text" id="genresDisplay" readonly placeholder="Géneros se llenarán automáticamente">
+                </div>
+                
+                <input type="hidden" id="portadaUrl">
+                <input type="hidden" id="tipo">
+                <input type="hidden" id="genresData">
+
+                <hr>
+                <p>⚠️ **Videos:** Debes insertar las URLs de *embed* manualmente.</p>
+                <hr>
+                
+                <div class="input-group" id="singleEmbedUrlGroup">
+                    <label for="embedUrl">URL del Video (iframe src)</label>
+                    <input type="url" id="embedUrl" placeholder="URL del Embed de la película">
+                </div>
+
+                <div id="episodesSection">
+                    <label>Episodios (URL Embed)</label>
+                    <div id="episodesContainer">
+                        </div>
+                    <button type="button" class="btn secondary small" onclick="addEpisodeInput()">+ Añadir Episodio</button>
+                </div>
+                
+                <hr>
+                <button type="submit" class="btn primary">Guardar Contenido</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="videoModal" class="modal">
+        <div class="modal-content video-modal-content">
+            <span class="close-button" onclick="closeModal('videoModal')">&times;</span>
+            <h2 id="videoModalTitle">Previsualización</h2>
+            
+            <div id="episodeListContainer" class="episode-list-container"></div>
+            <div id="episodeControls" style="text-align: center; margin-bottom: 10px; display: none;">
+                <button class="btn secondary small" onclick="toggleEpisodeList(true)">Cargar Todos los Capítulos</button>
+            </div>
+
+
+            <div class="video-container">
+                <iframe id="videoIframe" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            </div>
+
+            <div class="url-copy-container">
+                <input type="text" id="embedUrlDisplay" readonly placeholder="URL del Embed">
+                <button class="btn secondary" onclick="copyEmbedUrl()">Copiar URL</button>
+            </div>
+            <p id="copyMessage" class="copy-message"></p>
+
+        </div>
+    </div>
+
+    <script>
+        // ====================================================================
+        // === CONFIGURACIÓN CLAVE: TMDB API KEY (Se ha insertado la tuya) ===
+        // ====================================================================
+        const TMDB_API_KEY = '867b27ebb5a72c3f64ee67bc9dd7a794'; 
+        const TMDB_BASE_URL = 'https://api.themoviedb.org/3/';
+        const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+
+        // --- CONFIGURACIÓN DE PAGINACIÓN ---
+        const ITEMS_PER_PAGE = 8;
+        let currentPage = 1;
+        let currentSeriesEpisodes = [];
+
+        // --- INICIALIZACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Verificar Login
+            if (localStorage.getItem('loggedIn') !== 'true') {
+                window.location.href = 'login.html';
+                return;
+            }
+            // 2. Inicializar LocalStorage con datos de ejemplo (se inicializa vacío si no existe)
+            if (!localStorage.getItem('listaContenido')) {
+                localStorage.setItem('listaContenido', JSON.stringify([]));
+            }
+            // 3. Cargar el contenido
+            loadContent(currentPage);
+        });
+
+        // --- FUNCIONES DE API TMDb ---
+
+        async function fetchTmdbData() {
+            const tmdbId = document.getElementById('tmdbId').value;
+            const tmdbType = document.getElementById('tmdbType').value;
+            
+            if (!tmdbId) {
+                alert('Por favor, introduce un ID de TMDb.');
+                return;
+            }
+
+            const url = `${TMDB_BASE_URL}${tmdbType}/${tmdbId}?api_key=${TMDB_API_KEY}&language=es-ES`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Error al buscar ID: ${tmdbId}. Código: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                // Rellenar campos del formulario
+                const titulo = data.title || data.name;
+                const portada = TMDB_IMAGE_BASE + data.poster_path;
+                const generos = data.genres.map(g => g.name);
+                
+                document.getElementById('titulo').value = titulo;
+                document.getElementById('portadaUrl').value = portada;
+                document.getElementById('genresData').value = JSON.stringify(generos);
+                document.getElementById('genresDisplay').value = generos.join(', ');
+                
+                const tipoValue = tmdbType === 'movie' ? 'Película' : 'Serie';
+                document.getElementById('tipo').value = tipoValue;
+                
+                toggleEmbedInputs(tipoValue);
+
+                // Si es Serie y es un NUEVO contenido, añade input inicial para episodios
+                if (tmdbType === 'tv' && !document.getElementById('contentId').value) {
+                    document.getElementById('episodesContainer').innerHTML = '';
+                    addEpisodeInput(); 
+                }
+
+                alert(`Datos de "${titulo}" cargados exitosamente.`);
+
+            } catch (error) {
+                console.error('Error fetching TMDb data:', error);
+                alert(`Error: No se pudo obtener la información de TMDb. (${error.message})`);
+            }
+        }
+
+        // --- MANEJO DE EPISODIOS EN EL FORMULARIO ---
+
+        function toggleEmbedInputs(tipo) {
+            document.getElementById('singleEmbedUrlGroup').style.display = (tipo === 'Película' ? 'block' : 'none');
+            document.getElementById('episodesSection').style.display = (tipo === 'Serie' ? 'block' : 'none');
+            
+            if (tipo === 'Película') {
+                document.getElementById('episodesContainer').innerHTML = '';
+            } else {
+                document.getElementById('embedUrl').value = '';
+            }
+        }
+
+        function addEpisodeInput(url = '') {
+            const container = document.getElementById('episodesContainer');
+            const index = container.children.length;
+            
+            const div = document.createElement('div');
+            div.classList.add('input-group', 'episode-input-group');
+            div.innerHTML = `
+                <label for="episode-${index + 1}">Epi ${index + 1} URL:</label>
+                <div class="episode-input-row">
+                    <input type="url" id="episode-${index + 1}" class="episode-url" value="${url}" required>
+                    <button type="button" class="btn danger small remove-btn" onclick="this.parentNode.parentNode.remove()">X</button>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        // --- FUNCIONES CRUD Y PAGINACIÓN ---
+
+        function getContent() {
+            const storedContent = localStorage.getItem('listaContenido');
+            return storedContent ? JSON.parse(storedContent) : [];
+        }
+
+        function saveContent(contentArray) {
+            localStorage.setItem('listaContenido', JSON.stringify(contentArray));
+        }
+
+        function loadContent(page = 1) {
+            currentPage = page;
+            const contentListDiv = document.getElementById('contentList');
+            const paginationControlsDiv = document.getElementById('paginationControls');
+            contentListDiv.innerHTML = '';
+            paginationControlsDiv.innerHTML = '';
+            
+            let content = getContent();
+            content.sort((a, b) => b.id - a.id);
+            
+            const searchTitle = document.getElementById('searchTitle').value.toLowerCase();
+            const typeFilter = document.getElementById('typeFilter').value;
+            
+            if (searchTitle || typeFilter) {
+                content = content.filter(item => {
+                    const matchesTitle = item.titulo.toLowerCase().includes(searchTitle);
+                    const matchesType = !typeFilter || item.tipo === typeFilter;
+                    // También busca por género
+                    const matchesGenre = item.genres ? item.genres.some(g => g.toLowerCase().includes(searchTitle)) : false;
+                    return (matchesTitle || matchesGenre) && matchesType;
+                });
+            }
+
+            if (content.length === 0) {
+                contentListDiv.innerHTML = '<p class="no-content">No se encontró contenido.</p>';
+                return;
+            }
+
+            const totalItems = content.length;
+            const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+            const start = (currentPage - 1) * ITEMS_PER_PAGE;
+            const end = start + ITEMS_PER_PAGE;
+            const contentToDisplay = content.slice(start, end);
+            
+            // 4. Renderizar la lista
+            contentToDisplay.forEach(item => {
+                const card = document.createElement('div');
+                card.classList.add('content-card');
+                
+                // Usamos los géneros como tags
+                const tagsHtml = item.genres ? item.genres.map(g => `<span class="tag">${g}</span>`).join('') : '';
+                
+                let actionButton;
+                
+                // --- CAMBIO CLAVE AQUÍ: Pasamos el ID para AMBOS tipos ---
+                if ((item.tipo === 'Serie' && item.episodios && item.episodios.length > 0) || (item.tipo === 'Película' && item.embedUrl)) {
+                    actionButton = `<button class="btn secondary small" onclick="showVideoModal(${item.id})">Ver ${item.tipo === 'Serie' ? 'Capítulos' : 'Embed'}</button>`;
+                } else {
+                    actionButton = `<span class="tag danger">Sin URL</span>`;
+                }
+                // --------------------------------------------------------
+
+                card.innerHTML = `
+                    <div class="card-image">
+                        <img src="${item.portadaUrl}" alt="${item.titulo}">
+                    </div>
+                    <div class="card-info">
+                        <h3>${item.titulo}</h3>
+                        <p class="card-type">Tipo: ${item.tipo} ${item.tipo === 'Serie' ? `(${item.episodios ? item.episodios.length : 0} Eps)` : ''}</p>
+                        <div class="card-tags">${tagsHtml}</div>
+                        <p class="card-date">${item.fecha}</p>
+                        <div class="card-actions">
+                            <button class="btn primary small" onclick="editContent(${item.id})">Editar</button>
+                            <button class="btn danger small" onclick="deleteContent(${item.id})">Eliminar</button>
+                            ${actionButton}
+                        </div>
+                    </div>
+                `;
+                contentListDiv.appendChild(card);
+            });
+            
+            if (totalPages > 1) {
+                renderPaginationControls(totalPages);
+            }
+        }
+        
+        function renderPaginationControls(totalPages) {
+            const paginationControlsDiv = document.getElementById('paginationControls');
+            paginationControlsDiv.innerHTML = '';
+            
+            if (currentPage > 1) {
+                const prevButton = document.createElement('button');
+                prevButton.classList.add('btn', 'pagination-btn');
+                prevButton.textContent = '« Anterior';
+                prevButton.onclick = () => loadContent(currentPage - 1);
+                paginationControlsDiv.appendChild(prevButton);
+            }
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.classList.add('btn', 'pagination-btn', 'small');
+                pageButton.textContent = i;
+                if (i === currentPage) {
+                    pageButton.classList.add('active-page');
+                }
+                pageButton.onclick = () => loadContent(i);
+                paginationControlsDiv.appendChild(pageButton);
+            }
+
+            if (currentPage < totalPages) {
+                const nextButton = document.createElement('button');
+                nextButton.classList.add('btn', 'pagination-btn');
+                nextButton.textContent = 'Siguiente »';
+                nextButton.onclick = () => loadContent(currentPage + 1);
+                paginationControlsDiv.appendChild(nextButton);
+            }
+        }
+
+        function deleteContent(id) {
+            if (!confirm('¿Estás seguro de que quieres eliminar este contenido?')) return;
+            let content = getContent();
+            const newContent = content.filter(item => item.id !== id);
+            saveContent(newContent);
+            loadContent(currentPage); 
+            alert('Contenido eliminado.');
+        }
+
+        // --- MODAL Y FORMULARIO (CRUD) ---
+
+        function editContent(id) {
+             showContentModal(id);
+        }
+        
+        function showContentModal(id = null) {
+            const modal = document.getElementById('contentModal');
+            const form = document.getElementById('contentForm');
+            const episodesContainer = document.getElementById('episodesContainer');
+            
+            form.reset(); 
+            episodesContainer.innerHTML = ''; 
+            document.getElementById('genresDisplay').value = ''; 
+            
+            toggleEmbedInputs(null);
+
+            if (id) {
+                const itemToEdit = getContent().find(item => item.id === id);
+                if (!itemToEdit) return;
+
+                document.getElementById('modalTitle').textContent = 'Editar Contenido';
+                document.getElementById('contentId').value = itemToEdit.id;
+                document.getElementById('titulo').value = itemToEdit.titulo;
+                
+                document.getElementById('portadaUrl').value = itemToEdit.portadaUrl;
+                document.getElementById('tipo').value = itemToEdit.tipo;
+                document.getElementById('genresData').value = JSON.stringify(itemToEdit.genres || []); 
+                document.getElementById('genresDisplay').value = (itemToEdit.genres || []).join(', ');
+
+                const tmdbTypeVal = itemToEdit.tipo === 'Película' ? 'movie' : 'tv';
+                document.getElementById('tmdbType').value = tmdbTypeVal;
+                document.getElementById('tmdbId').value = itemToEdit.tmdbId || '';
+                
+                if (itemToEdit.tipo === 'Película') {
+                    document.getElementById('embedUrl').value = itemToEdit.embedUrl || '';
+                } else if (itemToEdit.tipo === 'Serie' && itemToEdit.episodios) {
+                    itemToEdit.episodios.forEach(url => addEpisodeInput(url));
+                }
+                toggleEmbedInputs(itemToEdit.tipo);
+
+            } else {
+                document.getElementById('modalTitle').textContent = 'Nuevo Contenido';
+                document.getElementById('contentId').value = '';
+                document.getElementById('tmdbType').value = 'movie'; // Mejor empezar con película por defecto
+                toggleEmbedInputs('Película'); 
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.style.display = 'none';
+
+            if (modalId === 'videoModal') {
+                document.getElementById('videoIframe').src = '';
+                document.getElementById('embedUrlDisplay').value = '';
+                document.getElementById('copyMessage').textContent = '';
+                document.getElementById('episodeListContainer').innerHTML = ''; 
+                document.getElementById('episodeControls').style.display = 'none'; 
+                currentSeriesEpisodes = [];
+            }
+        }
+
+        document.getElementById('contentForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('contentId').value;
+            const titulo = document.getElementById('titulo').value;
+            const portadaUrl = document.getElementById('portadaUrl').value;
+            const tipo = document.getElementById('tipo').value;
+            const genres = JSON.parse(document.getElementById('genresData').value || '[]');
+            const tmdbId = document.getElementById('tmdbId').value;
+            
+            if (!titulo || !portadaUrl) {
+                alert('Falta completar los datos de TMDb (Título y Portada).');
+                return;
+            }
+
+            let content = getContent();
+            let newItem = { 
+                id: id || Date.now(), 
+                titulo, 
+                tipo, 
+                portadaUrl, 
+                genres,
+                tmdbId,
+                fecha: new Date().toLocaleDateString('es-ES')
+            };
+            
+            if (tipo === 'Película') {
+                const embedUrl = document.getElementById('embedUrl').value;
+                if (!embedUrl) { alert('La URL de Embed es requerida para Películas.'); return; }
+                newItem.embedUrl = embedUrl;
+            } else if (tipo === 'Serie') {
+                const episodeUrls = Array.from(document.querySelectorAll('.episode-url')).map(input => input.value).filter(url => url);
+                if (episodeUrls.length === 0) { alert('Se requiere al menos un episodio para Series.'); return; }
+                newItem.episodios = episodeUrls;
+            }
+
+            if (id) {
+                const index = content.findIndex(item => item.id == id);
+                if (index !== -1) {
+                    delete content[index].embedUrl;
+                    delete content[index].episodios; 
+                    content[index] = { ...content[index], ...newItem };
+                }
+                alert('Contenido actualizado exitosamente.');
+            } else {
+                content.push(newItem);
+                alert('Contenido creado exitosamente.');
+            }
+
+            saveContent(content);
+            loadContent(1); 
+            closeModal('contentModal');
+        });
+
+        // --- FUNCIONES DE VIDEO EMBED Y COPIAR URL ---
+        const EPISODES_DISPLAY_LIMIT = 50; // Límite de episodios a mostrar inicialmente
+        
+        function playEpisode(url) {
+            const videoIframe = document.getElementById('videoIframe');
+            const urlDisplay = document.getElementById('embedUrlDisplay');
+            
+            // **IMPORTANTE**: Aquí se carga la URL en el iframe y en el campo de texto.
+            videoIframe.src = url;
+            urlDisplay.value = url;
+            
+            document.querySelectorAll('.episode-list-container button').forEach(btn => btn.classList.remove('active-page'));
+            
+            // Solo para series: marca el botón de episodio activo
+            const activeBtn = document.querySelector(`.episode-list-container button[data-url="${url}"]`);
+            if (activeBtn) {
+                 activeBtn.classList.add('active-page');
+            }
+        }
+
+        function renderEpisodeButtons(episodes, container, limit = null) {
+            container.innerHTML = '';
+            const listToRender = limit ? episodes.slice(0, limit) : episodes;
+            
+            listToRender.forEach((url, index) => {
+                const btn = document.createElement('button');
+                btn.classList.add('btn', 'pagination-btn', 'small');
+                btn.textContent = `Epi ${index + 1}`;
+                btn.setAttribute('data-url', url); // Guardar la URL en un atributo data-
+                btn.onclick = () => playEpisode(url);
+                container.appendChild(btn);
+            });
+        }
+        
+        function toggleEpisodeList(showAll) {
+            const episodeListContainer = document.getElementById('episodeListContainer');
+            const episodeControls = document.getElementById('episodeControls');
+            
+            if (showAll) {
+                renderEpisodeButtons(currentSeriesEpisodes, episodeListContainer, null); 
+                episodeControls.style.display = 'none';
+                episodeListContainer.style.maxHeight = '300px'; 
+            } else {
+                renderEpisodeButtons(currentSeriesEpisodes, episodeListContainer, EPISODES_DISPLAY_LIMIT); 
+                episodeControls.style.display = 'block';
+                episodeListContainer.style.maxHeight = '120px'; 
+            }
+            
+            // Re-activar el primer episodio si no hay uno activo
+            if (currentSeriesEpisodes.length > 0) {
+                playEpisode(currentSeriesEpisodes[0]);
+            }
+        }
+
+        // --- FUNCIÓN showVideoModal REFACTORIZADA (solo acepta ID) ---
+        function showVideoModal(contentId) {
+            const videoModal = document.getElementById('videoModal');
+            const videoModalTitle = document.getElementById('videoModalTitle');
+            const episodeListContainer = document.getElementById('episodeListContainer');
+            const episodeControls = document.getElementById('episodeControls');
+
+            // 1. Buscar el contenido completo
+            const item = getContent().find(i => i.id === contentId);
+            if (!item) return;
+
+            episodeListContainer.innerHTML = '';
+            document.getElementById('videoIframe').src = '';
+            
+            videoModalTitle.textContent = item.titulo;
+
+            if (item.tipo === 'Serie') {
+                // LÓGICA DE SERIE
+                if (!item.episodios || item.episodios.length === 0) {
+                    alert('No hay episodios disponibles para esta serie.');
+                    return;
+                }
+
+                currentSeriesEpisodes = item.episodios;
+                episodeListContainer.style.display = 'flex';
+                
+                if (currentSeriesEpisodes.length > EPISODES_DISPLAY_LIMIT) {
+                    toggleEpisodeList(false);
+                } else {
+                    renderEpisodeButtons(currentSeriesEpisodes, episodeListContainer, null);
+                    episodeControls.style.display = 'none';
+                    episodeListContainer.style.maxHeight = '120px';
+                    playEpisode(currentSeriesEpisodes[0]);
+                }
+                
+            } else if (item.tipo === 'Película') {
+                // LÓGICA DE PELÍCULA
+                const embedUrl = item.embedUrl;
+                if (!embedUrl) {
+                    alert('No hay URL de Embed para esta película.');
+                    return;
+                }
+
+                playEpisode(embedUrl); // Carga el embed y pone la URL en el campo de texto
+                episodeListContainer.style.display = 'none';
+                episodeControls.style.display = 'none';
+
+            } else {
+                return;
+            }
+
+            videoModal.style.display = 'block';
+        }
+        // -------------------------------------------------------------
+
+
+        function copyEmbedUrl() {
+            const urlInput = document.getElementById('embedUrlDisplay');
+            const copyMessage = document.getElementById('copyMessage');
+
+            urlInput.select();
+            urlInput.setSelectionRange(0, 99999); 
+
+            try {
+                // Intento moderno para copiar (si falla, usa el obsoleto)
+                if (!navigator.clipboard) {
+                    document.execCommand('copy');
+                } else {
+                    navigator.clipboard.writeText(urlInput.value);
+                }
+                
+                copyMessage.textContent = '¡URL copiada al portapapeles!';
+                copyMessage.style.color = '#4CAF50'; 
+            } catch (err) {
+                copyMessage.textContent = 'Error al intentar copiar. Por favor, cópielo manualmente.';
+                copyMessage.style.color = '#d9534f'; 
+            }
+            
+            setTimeout(() => {
+                copyMessage.textContent = '';
+            }, 3000);
+        }
+
+        function logout() {
+            localStorage.removeItem('loggedIn');
+            window.location.href = 'login.html';
+        }
+
+        window.onclick = function(event) {
+            const contentModal = document.getElementById('contentModal');
+            const videoModal = document.getElementById('videoModal');
+
+            if (event.target === contentModal) {
+                closeModal('contentModal');
+            }
+            if (event.target === videoModal) {
+                closeModal('videoModal');
+            }
+        }
+    </script>
+
+</body>
+</html>
