@@ -49,38 +49,37 @@
                         <option value="tv">Serie</option>
                     </select>
                 </div>
+
                 <div class="input-group tmdb-lookup">
                     <label for="tmdbId">ID de TMDb (Ej: 635237)</label>
                     <div class="tmdb-input-row">
                         <input type="number" id="tmdbId" placeholder="Introduce el ID de TMDb" required>
                         <button type="button" class="btn primary small" onclick="fetchTmdbData()">Buscar y Rellenar</button>
                     </div>
-                </div>
-
-                <div class="input-group">
-                    <label for="titulo">Título</label>
-                    <input type="text" id="titulo" required readonly>
-                </div>
-
-                <div class="input-group">
-                    <label for="genresDisplay">Géneros (TMDb)</label>
-                    <input type="text" id="genresDisplay" readonly placeholder="Géneros se llenarán automáticamente">
+                    <p id="tmdbMessage" class="copy-message" style="margin-top: 5px;"></p>
                 </div>
                 
-                <input type="hidden" id="portadaUrl">
-                <input type="hidden" id="tipo">
-                <input type="hidden" id="genresData">
+                <div class="input-group">
+                    <label for="contentTitle">Título</label>
+                    <input type="text" id="contentTitle" required readonly>
+                </div>
 
-                <hr>
+                <div class="input-group">
+                    <label for="contentGenres">Géneros (TMDb)</label>
+                    <input type="text" id="contentGenres" readonly placeholder="Géneros se llenarán automáticamente">
+                </div>
+                
+                <input type="hidden" id="posterUrl">
+                <input type="hidden" id="contentType"> <input type="hidden" id="contentDate"> <hr>
                 <p>⚠️ **Videos:** Debes insertar las URLs de *embed* manualmente.</p>
                 <hr>
                 
                 <div class="input-group" id="singleEmbedUrlGroup">
                     <label for="embedUrl">URL del Video (iframe src)</label>
-                    <input type="url" id="embedUrl" placeholder="URL del Embed de la película">
+                    <input type="url" id="embedUrl" placeholder="URL del Embed de la película" required>
                 </div>
 
-                <div id="episodesSection">
+                <div id="episodesSection" style="display: none;">
                     <label>Episodios (URL Embed)</label>
                     <div id="episodesContainer">
                         </div>
@@ -88,7 +87,7 @@
                 </div>
                 
                 <hr>
-                <button type="submit" class="btn primary">Guardar Contenido</button>
+                <button type="submit" id="saveContentBtn" class="btn primary">Guardar Contenido</button>
             </form>
         </div>
     </div>
@@ -98,29 +97,37 @@
             <span class="close-button" onclick="closeModal('videoModal')">&times;</span>
             <h2 id="videoModalTitle">Previsualización</h2>
             
-            <div id="episodeListContainer" class="episode-list-container"></div>
-            <div id="episodeControls" style="text-align: center; margin-bottom: 10px; display: none;">
-                <button class="btn secondary small" onclick="toggleEpisodeList(true)">Cargar Todos los Capítulos</button>
+            <div id="episodeListContainer" class="episode-list-container">
+                <ul id="episodeList"></ul>
             </div>
-
-
+            
             <div class="video-container">
-                <iframe id="videoIframe" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                <iframe id="videoEmbed" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
             </div>
 
             <div class="url-copy-container">
-                <input type="text" id="embedUrlDisplay" readonly placeholder="URL del Embed">
+                <input type="text" id="copyInput" readonly placeholder="URL del Embed">
                 <button class="btn secondary" onclick="copyEmbedUrl()">Copiar URL</button>
             </div>
             <p id="copyMessage" class="copy-message"></p>
 
         </div>
     </div>
-
-        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     
-       <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <div id="copyModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('copyModal')">&times;</span>
+            <h2>Compartir URL</h2>
+            <div class="input-group">
+                <label for="copyInput">URL del Embed:</label>
+                <input type="text" id="copyInput" readonly>
+            </div>
+            <button class="btn primary" onclick="copyEmbedUrl()">Copiar</button>
+            <p id="copyMessage" class="copy-message"></p>
+        </div>
+    </div>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     
     <script>
@@ -158,26 +165,33 @@
         // ====================================================================
         async function fetchTmdbData() {
             const tmdbId = document.getElementById('tmdbId').value;
-            const contentType = document.getElementById('contentType').value;
+            const tmdbType = document.getElementById('tmdbType').value;
             const messageElement = document.getElementById('tmdbMessage');
 
-            if (!tmdbId || !contentType) {
+            if (!tmdbId || !tmdbType) {
                 messageElement.textContent = "ID o Tipo (Película/Serie) faltante.";
                 messageElement.style.color = '#d9534f';
                 return;
             }
 
             try {
-                const url = `https://api.themoviedb.org/3/${contentType.toLowerCase()}/${tmdbId}?api_key=${TMDB_API_KEY}&language=es-ES`;
+                const url = `https://api.themoviedb.org/3/${tmdbType.toLowerCase()}/${tmdbId}?api_key=${TMDB_API_KEY}&language=es-ES`;
                 const response = await fetch(url);
                 const data = await response.json();
 
                 if (response.ok) {
+                    const type = tmdbType === 'movie' ? 'Película' : 'Serie';
+                    
                     document.getElementById('contentTitle').value = data.title || data.name || '';
                     document.getElementById('posterUrl').value = data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '';
                     
                     const genres = data.genres ? data.genres.map(g => g.name).join(', ') : '';
                     document.getElementById('contentGenres').value = genres;
+                    
+                    // Rellenar campos ocultos
+                    document.getElementById('contentType').value = type;
+                    document.getElementById('contentDate').value = data.release_date || data.first_air_date || '';
+
 
                     messageElement.textContent = `✅ Datos de TMDB cargados para ${data.title || data.name}`;
                     messageElement.style.color = '#4CAF50';
@@ -208,28 +222,46 @@
                 document.getElementById('modalTitle').textContent = 'Editar Contenido';
                 // Usamos el ID de Firebase para saber qué documento actualizar
                 document.getElementById('contentId').value = content.firebaseId; 
-
-                document.getElementById('contentType').value = content.tipo || 'Película';
+                
+                // Cargar Tipo y actualizar el select TMDB
+                const tmdbType = content.tipo === 'Película' ? 'movie' : 'tv';
+                document.getElementById('tmdbType').value = tmdbType;
+                
+                // Campos que antes tenían IDs incorrectos:
                 document.getElementById('contentTitle').value = content.titulo || '';
-                document.getElementById('posterUrl').value = content.portadaUrl || '';
-                document.getElementById('embedUrl').value = content.embedUrl || '';
                 document.getElementById('contentGenres').value = (content.genres && content.genres.join(', ')) || '';
-                document.getElementById('tmdbId').value = content.tmdbId || '';
+
+                // Campos ocultos
+                document.getElementById('contentType').value = content.tipo || 'Película'; // Valor del tipo
+                document.getElementById('posterUrl').value = content.portadaUrl || '';
                 document.getElementById('contentDate').value = content.fecha || '';
+                
+                // Campos manuales
+                document.getElementById('embedUrl').value = content.embedUrl || '';
+                document.getElementById('tmdbId').value = content.tmdbId || '';
 
                 if (content.tipo === 'Serie' && content.episodios) {
                     content.episodios.forEach(ep => addEpisodeInput(ep));
                 }
+                
+                // Mostrar/Ocultar episodios
+                document.getElementById('episodesSection').style.display = (content.tipo === 'Serie') ? 'block' : 'none';
             } else {
                 document.getElementById('modalTitle').textContent = 'Nuevo Contenido';
+                // Por defecto: Película
+                document.getElementById('tmdbType').value = 'movie'; 
+                document.getElementById('contentType').value = 'Película';
+                document.getElementById('episodesSection').style.display = 'none';
             }
             
-            document.getElementById('episodesSection').style.display = (document.getElementById('contentType').value === 'Serie') ? 'block' : 'none';
             document.getElementById('contentModal').style.display = 'block';
         }
 
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
+            if (modalId === 'videoModal') {
+                document.getElementById('videoEmbed').src = ''; // Detiene el video
+            }
         }
 
         function addEpisodeInput(episode = {}) {
@@ -377,7 +409,7 @@
             const firebaseId = contentIdInput.value; // Contiene el ID de Firebase si estamos editando
 
             // 1. Recolección de datos
-            const contentType = document.getElementById('contentType').value;
+            const contentType = document.getElementById('contentType').value; // Ahora se llena con el listener
             const title = document.getElementById('contentTitle').value.trim();
             const embedUrl = document.getElementById('embedUrl').value.trim();
             const genresString = document.getElementById('contentGenres').value;
@@ -486,9 +518,16 @@
             // Event Listeners
             document.getElementById('fetchTmdbBtn').addEventListener('click', fetchTmdbData);
             document.getElementById('addEpisodeBtn').addEventListener('click', () => addEpisodeInput());
-            document.getElementById('contentType').addEventListener('change', (e) => {
-                document.getElementById('episodesSection').style.display = (e.target.value === 'Serie') ? 'block' : 'none';
+            
+            // CORREGIDO: Listener para Tipo de Contenido (Película/Serie)
+            document.getElementById('tmdbType').addEventListener('change', (e) => {
+                const isSeries = e.target.value === 'tv';
+                document.getElementById('episodesSection').style.display = isSeries ? 'block' : 'none';
+                
+                // Actualiza el campo oculto que usa el formulario para guardar en Firebase
+                document.getElementById('contentType').value = isSeries ? 'Serie' : 'Película';
             });
+            
             document.getElementById('searchTitle').addEventListener('input', () => loadContent(1));
             document.getElementById('typeFilter').addEventListener('change', () => loadContent(1));
         });
@@ -578,4 +617,3 @@
     
 </body>
 </html>
-
