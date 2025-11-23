@@ -351,7 +351,7 @@ body {
 
 /*
 =================================================
-             --- RESPONSIVE ---
+             --- RESPONSIVE (CORREGIDO) ---
 =================================================
 */
 @media (max-width: 768px) {
@@ -368,14 +368,17 @@ body {
     .content-card {
         flex-direction: column;
         text-align: center;
-        align-items: stretch;
+        /* CRÍTICO: Alinea los ítems de la tarjeta (imagen, texto) al centro */
+        align-items: center; 
     }
     .card-image {
-        width: 100%;
-        height: auto;
-        max-height: 200px;
+        /* CRÍTICO: Se establece un ancho fijo más pequeño en móvil */
+        width: 150px; 
+        height: 225px; /* Proporcional (150x225 es 2:3) */
+        max-height: 250px;
         margin-right: 0;
         margin-bottom: 10px;
+        margin: 0 auto 10px auto; /* Centra la imagen */
     }
     .card-actions {
         justify-content: center;
