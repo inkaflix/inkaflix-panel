@@ -25,7 +25,7 @@
                 <option value="Serie">Serie</option>
                 <option value="Película">Película</option>
             </select>
-            <button class="btn primary" onclick="loadContent()">Filtrar</button>
+            <button type="button" class="btn primary" onclick="loadContent()">Filtrar</button>
         </div>
 
         <div id="contentList" class="content-list">
@@ -70,7 +70,10 @@
                 </div>
                 
                 <input type="hidden" id="posterUrl">
-                <input type="hidden" id="contentType"> <input type="hidden" id="contentDate"> <hr>
+                <input type="hidden" id="contentType"> 
+                <input type="hidden" id="contentDate"> 
+
+                <hr>
                 <p>⚠️ **Videos:** Debes insertar las URLs de *embed* manualmente.</p>
                 <hr>
                 
@@ -106,10 +109,10 @@
             </div>
 
             <div class="url-copy-container">
-                <input type="text" id="copyInput" readonly placeholder="URL del Embed">
-                <button class="btn secondary" onclick="copyEmbedUrl()">Copiar URL</button>
+                <input type="text" id="copyInputVideo" readonly placeholder="URL del Embed">
+                <button class="btn secondary" onclick="copyEmbedUrl('copyInputVideo', 'copyMessageVideo')">Copiar URL</button>
             </div>
-            <p id="copyMessage" class="copy-message"></p>
+            <p id="copyMessageVideo" class="copy-message"></p>
 
         </div>
     </div>
@@ -119,11 +122,11 @@
             <span class="close-button" onclick="closeModal('copyModal')">&times;</span>
             <h2>Compartir URL</h2>
             <div class="input-group">
-                <label for="copyInput">URL del Embed:</label>
-                <input type="text" id="copyInput" readonly>
+                <label for="copyInputShare">URL del Embed:</label>
+                <input type="text" id="copyInputShare" readonly>
             </div>
-            <button class="btn primary" onclick="copyEmbedUrl()">Copiar</button>
-            <p id="copyMessage" class="copy-message"></p>
+            <button class="btn primary" onclick="copyEmbedUrl('copyInputShare', 'copyMessageShare')">Copiar</button>
+            <p id="copyMessageShare" class="copy-message"></p>
         </div>
     </div>
     
@@ -143,18 +146,15 @@
             appId: "1:631219664778:web:83fca161b606e57e4eba73"
         };
 
-        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
-
-        // Obtener la referencia a la base de datos y la Colección
         const db = firebase.firestore();
-        const contentCollection = db.collection('listaContenido'); // Colección de Firestore
+        const contentCollection = db.collection('listaContenido'); 
         
         // ====================================================================
         // === VARIABLES Y CONSTANTES GLOBALES ===
         // ====================================================================
         const TMDB_API_KEY = '867b27ebb5a72c3f64ee67bc9dd7a794'; 
-        const CONTENT_PER_PAGE = 10;
+        const CONTENT_PER_PAGE = 10; // <<-- LA REGLA DE PAGINACIÓN: 10 ELEMENTOS
         let currentPage = 1;
         let allContent = []; // Almacenará todo el contenido cargado de Firebase
 
@@ -188,7 +188,6 @@
                     const genres = data.genres ? data.genres.map(g => g.name).join(', ') : '';
                     document.getElementById('contentGenres').value = genres;
                     
-                    // Rellenar campos ocultos
                     document.getElementById('contentType').value = type;
                     document.getElementById('contentDate').value = data.release_date || data.first_air_date || '';
 
@@ -207,7 +206,7 @@
         }
 
         // ====================================================================
-        // === FUNCIONES DE RENDERIZADO Y UTILIDAD ===
+        // === FUNCIONES DE MODAL Y UTILIDAD ===
         // ====================================================================
         
         function showContentModal(content = null) {
@@ -215,28 +214,22 @@
             document.getElementById('tmdbMessage').textContent = '';
             document.getElementById('episodesContainer').innerHTML = '';
             
-            // Campo oculto para guardar el ID de Firebase al editar
             document.getElementById('contentId').value = ''; 
 
             if (content) {
                 document.getElementById('modalTitle').textContent = 'Editar Contenido';
-                // Usamos el ID de Firebase para saber qué documento actualizar
                 document.getElementById('contentId').value = content.firebaseId; 
                 
-                // Cargar Tipo y actualizar el select TMDB
                 const tmdbType = content.tipo === 'Película' ? 'movie' : 'tv';
                 document.getElementById('tmdbType').value = tmdbType;
                 
-                // Campos que antes tenían IDs incorrectos:
                 document.getElementById('contentTitle').value = content.titulo || '';
                 document.getElementById('contentGenres').value = (content.genres && content.genres.join(', ')) || '';
 
-                // Campos ocultos
-                document.getElementById('contentType').value = content.tipo || 'Película'; // Valor del tipo
+                document.getElementById('contentType').value = content.tipo || 'Película'; 
                 document.getElementById('posterUrl').value = content.portadaUrl || '';
                 document.getElementById('contentDate').value = content.fecha || '';
                 
-                // Campos manuales
                 document.getElementById('embedUrl').value = content.embedUrl || '';
                 document.getElementById('tmdbId').value = content.tmdbId || '';
 
@@ -244,14 +237,14 @@
                     content.episodios.forEach(ep => addEpisodeInput(ep));
                 }
                 
-                // Mostrar/Ocultar episodios
                 document.getElementById('episodesSection').style.display = (content.tipo === 'Serie') ? 'block' : 'none';
+                document.getElementById('singleEmbedUrlGroup').style.display = (content.tipo === 'Película') ? 'block' : 'none';
             } else {
                 document.getElementById('modalTitle').textContent = 'Nuevo Contenido';
-                // Por defecto: Película
                 document.getElementById('tmdbType').value = 'movie'; 
                 document.getElementById('contentType').value = 'Película';
                 document.getElementById('episodesSection').style.display = 'none';
+                document.getElementById('singleEmbedUrlGroup').style.display = 'block';
             }
             
             document.getElementById('contentModal').style.display = 'block';
@@ -260,7 +253,7 @@
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
             if (modalId === 'videoModal') {
-                document.getElementById('videoEmbed').src = ''; // Detiene el video
+                document.getElementById('videoEmbed').src = ''; 
             }
         }
 
@@ -282,6 +275,47 @@
             container.appendChild(div);
         }
 
+        function showCopyModal(url) {
+            document.getElementById('copyInputShare').value = url;
+            document.getElementById('copyMessageShare').textContent = ''; 
+            document.getElementById('copyModal').style.display = 'block';
+        }
+
+        function copyEmbedUrl(inputId, messageId) {
+            const urlInput = document.getElementById(inputId);
+            const copyMessage = document.getElementById(messageId);
+
+            urlInput.select();
+            urlInput.setSelectionRange(0, 99999); 
+
+            try {
+                if (!navigator.clipboard) {
+                    document.execCommand('copy');
+                } else {
+                    navigator.clipboard.writeText(urlInput.value);
+                }
+                
+                copyMessage.textContent = '¡URL copiada al portapapeles!';
+                copyMessage.style.color = '#4CAF50'; 
+            } catch (err) {
+                copyMessage.textContent = 'Error al intentar copiar.';
+                copyMessage.style.color = '#d9534f'; 
+            }
+            
+            setTimeout(() => {
+                copyMessage.textContent = '';
+            }, 3000);
+        }
+
+        function logout() {
+            localStorage.removeItem('loggedIn');
+            window.location.href = 'login.html';
+        }
+
+        // ====================================================================
+        // === FUNCIONES DE RENDERIZADO Y PAGINACIÓN ===
+        // ====================================================================
+
         function renderContent(contentArray) {
             const contentList = document.getElementById('contentList');
             contentList.innerHTML = ''; 
@@ -293,17 +327,16 @@
 
             contentArray.forEach(content => {
                 const div = document.createElement('div');
-                div.className = 'content-item';
+                div.className = 'content-item'; // Clase corregida para coincidir con CSS
                 div.innerHTML = `
-                    <div class="content-image-box">
-                        <img src="${content.portadaUrl}" alt="${content.titulo}" onerror="this.onerror=null;this.src='https://via.placeholder.com/150x225?text=No+Poster'">
+                    <div class="content-image-box"> <img src="${content.portadaUrl}" alt="${content.titulo}" onerror="this.onerror=null;this.src='https://via.placeholder.com/150x225?text=No+Poster'">
                         <span class="content-type-badge">${content.tipo}</span>
                     </div>
-                    <div class="content-details">
+                    <div class="card-info">
                         <h3>${content.titulo}</h3>
                         <p class="content-genres">${(content.genres && content.genres.join(', ')) || 'Sin Géneros'}</p>
                         <p class="content-date">Fecha: ${content.fecha || 'N/A'}</p>
-                        <div class="content-actions">
+                        <div class="card-actions">
                             <button class="btn primary small" onclick="editContent('${content.firebaseId}')">Editar</button>
                             <button class="btn danger small" onclick="deleteContent('${content.firebaseId}')">Eliminar</button>
                             <button class="btn secondary small" onclick="showVideoModal('${content.embedUrl}', '${content.titulo}', ${content.tipo === 'Serie' ? JSON.stringify(content.episodios) : '[]'})">Ver</button>
@@ -320,7 +353,7 @@
             paginationControls.innerHTML = '';
             const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-            if (totalPages <= 1) return;
+            if (totalPages <= 1) return; 
 
             // Botón Anterior
             const prevBtn = document.createElement('button');
@@ -330,9 +363,13 @@
             prevBtn.onclick = () => loadContent(currentPage - 1);
             paginationControls.appendChild(prevBtn);
 
-            // Páginas (simplificado a solo 5)
+            // Páginas (Muestra hasta 5 botones)
             let startPage = Math.max(1, currentPage - 2);
             let endPage = Math.min(totalPages, currentPage + 2);
+            if (endPage - startPage < 4) {
+                if (startPage === 1) endPage = Math.min(totalPages, 5);
+                if (endPage === totalPages) startPage = Math.max(1, totalPages - 4);
+            }
 
             for (let i = startPage; i <= endPage; i++) {
                 const pageBtn = document.createElement('button');
@@ -361,7 +398,7 @@
             contentList.innerHTML = '<p class="loading-message">Cargando contenido de la nube...</p>';
 
             try {
-                // 1. OBTENER TODOS LOS DATOS DE FIREBASE
+                // 1. OBTENER TODOS LOS DATOS DE FIREBASE (Para paginar en el cliente)
                 const snapshot = await contentCollection.orderBy('id', 'desc').get();
                 allContent = [];
                 snapshot.forEach(doc => {
@@ -369,7 +406,7 @@
                 });
             } catch (error) {
                 console.error("Error al cargar contenido de Firebase:", error);
-                contentList.innerHTML = '<p class="error-message">Error al conectar con la base de datos. (Revisa tus Reglas de Seguridad).</p>';
+                contentList.innerHTML = '<p class="error-message">Error al conectar con la base de datos.</p>';
                 return;
             }
 
@@ -405,22 +442,27 @@
             const saveButton = document.getElementById('saveContentBtn');
             saveButton.disabled = true;
 
-            const contentIdInput = document.getElementById('contentId');
-            const firebaseId = contentIdInput.value; // Contiene el ID de Firebase si estamos editando
+            const firebaseId = document.getElementById('contentId').value; 
 
             // 1. Recolección de datos
-            const contentType = document.getElementById('contentType').value; // Ahora se llena con el listener
+            const contentType = document.getElementById('contentType').value; 
             const title = document.getElementById('contentTitle').value.trim();
             const embedUrl = document.getElementById('embedUrl').value.trim();
             const genresString = document.getElementById('contentGenres').value;
 
-            // **VALIDACIÓN SIMPLE**
-            if (!title || !embedUrl) {
-                alert('El Título y la URL de Embed son campos obligatorios.');
+            if (!title) {
+                alert('El Título es obligatorio.');
                 saveButton.disabled = false;
                 return;
             }
-
+            
+            // Validar URL de Embed si es Película o si es Serie y la URL principal se usa como trailer
+            if (contentType === 'Película' && !embedUrl) {
+                alert('La URL de Embed de la Película es obligatoria.');
+                saveButton.disabled = false;
+                return;
+            }
+            
             const contentData = {
                 tipo: contentType,
                 titulo: title,
@@ -459,16 +501,16 @@
                     alert('Contenido actualizado correctamente en Firebase.');
                 } else {
                     // 3. NUEVO (Add)
-                    contentData.id = Date.now(); // Timestamp para orden
+                    contentData.id = Date.now(); 
                     await contentCollection.add(contentData); 
                     alert('Contenido guardado correctamente en Firebase.');
                 }
 
                 closeModal('contentModal');
-                loadContent(); // Refrescar la lista después de guardar
+                loadContent(); 
             } catch (error) {
                 console.error("Error al guardar en Firebase: ", error);
-                alert('Hubo un error al guardar el contenido en la nube. Revisa la consola para más detalles.');
+                alert('Hubo un error al guardar el contenido en la nube.');
             } finally {
                 saveButton.disabled = false;
             }
@@ -493,7 +535,7 @@
                 try {
                     await contentCollection.doc(firebaseId).delete();
                     alert('Contenido eliminado de Firebase.');
-                    loadContent(); // Refrescar la lista
+                    loadContent(); 
                 } catch (error) {
                     console.error("Error al eliminar de Firebase: ", error);
                     alert('Hubo un error al eliminar el contenido.');
@@ -506,97 +548,32 @@
         // ====================================================================
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Verificar Login (Sigue usando localStorage)
             if (localStorage.getItem('loggedIn') !== 'true') {
                 window.location.href = 'login.html';
                 return;
             }
             
-            // Cargar el contenido de Firebase al iniciar
             loadContent(); 
 
-            // Event Listeners
-            document.getElementById('fetchTmdbBtn').addEventListener('click', fetchTmdbData);
-            document.getElementById('addEpisodeBtn').addEventListener('click', () => addEpisodeInput());
-            
-            // CORREGIDO: Listener para Tipo de Contenido (Película/Serie)
+            // Listener para el cambio de tipo de contenido (Película/Serie)
             document.getElementById('tmdbType').addEventListener('change', (e) => {
                 const isSeries = e.target.value === 'tv';
+                
                 document.getElementById('episodesSection').style.display = isSeries ? 'block' : 'none';
+                document.getElementById('singleEmbedUrlGroup').style.display = isSeries ? 'none' : 'block';
                 
                 // Actualiza el campo oculto que usa el formulario para guardar en Firebase
                 document.getElementById('contentType').value = isSeries ? 'Serie' : 'Película';
+                
+                // Si cambiamos de tipo, limpiamos los campos irrelevantes para evitar errores
+                document.getElementById('embedUrl').value = '';
+                document.getElementById('episodesContainer').innerHTML = '';
+
             });
             
             document.getElementById('searchTitle').addEventListener('input', () => loadContent(1));
             document.getElementById('typeFilter').addEventListener('change', () => loadContent(1));
         });
-
-        // Las demás funciones (showVideoModal, copyEmbedUrl, logout, window.onclick) quedan igual.
-        
-        function showVideoModal(embedUrl, title, episodes = []) {
-            const videoModal = document.getElementById('videoModal');
-            const videoEmbed = document.getElementById('videoEmbed');
-            const modalTitle = document.getElementById('videoModalTitle');
-            const episodeList = document.getElementById('episodeList');
-
-            modalTitle.textContent = title;
-            videoEmbed.src = embedUrl;
-            videoModal.style.display = 'block';
-            
-            episodeList.innerHTML = '';
-            if (episodes.length > 0) {
-                episodes.forEach(ep => {
-                    const li = document.createElement('li');
-                    const link = document.createElement('a');
-                    link.href = '#';
-                    link.textContent = ep.titulo || 'Episodio ' + (episodeList.children.length + 1);
-                    link.onclick = (e) => {
-                        e.preventDefault();
-                        videoEmbed.src = ep.url;
-                    };
-                    li.appendChild(link);
-                    episodeList.appendChild(li);
-                });
-            }
-        }
-
-        function showCopyModal(url) {
-            document.getElementById('copyInput').value = url;
-            document.getElementById('copyMessage').textContent = ''; 
-            document.getElementById('copyModal').style.display = 'block';
-        }
-
-        function copyEmbedUrl() {
-            const urlInput = document.getElementById('copyInput');
-            const copyMessage = document.getElementById('copyMessage');
-
-            urlInput.select();
-            urlInput.setSelectionRange(0, 99999); 
-
-            try {
-                if (!navigator.clipboard) {
-                    document.execCommand('copy');
-                } else {
-                    navigator.clipboard.writeText(urlInput.value);
-                }
-                
-                copyMessage.textContent = '¡URL copiada al portapapeles!';
-                copyMessage.style.color = '#4CAF50'; 
-            } catch (err) {
-                copyMessage.textContent = 'Error al intentar copiar. Por favor, cópielo manualmente.';
-                copyMessage.style.color = '#d9534f'; 
-            }
-            
-            setTimeout(() => {
-                copyMessage.textContent = '';
-            }, 3000);
-        }
-
-        function logout() {
-            localStorage.removeItem('loggedIn');
-            window.location.href = 'login.html';
-        }
 
         window.onclick = function(event) {
             const contentModal = document.getElementById('contentModal');
@@ -611,6 +588,36 @@
             }
              if (event.target === copyModal) {
                 closeModal('copyModal');
+            }
+        }
+        
+        function showVideoModal(embedUrl, title, episodes = []) {
+            const videoModal = document.getElementById('videoModal');
+            const videoEmbed = document.getElementById('videoEmbed');
+            const modalTitle = document.getElementById('videoModalTitle');
+            const episodeList = document.getElementById('episodeList');
+            const copyInputVideo = document.getElementById('copyInputVideo');
+
+            modalTitle.textContent = title;
+            videoEmbed.src = embedUrl;
+            copyInputVideo.value = embedUrl; // URL por defecto (película o trailer de serie)
+            videoModal.style.display = 'block';
+            
+            episodeList.innerHTML = '';
+            if (episodes.length > 0) {
+                episodes.forEach((ep, index) => {
+                    const li = document.createElement('li');
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.textContent = ep.titulo || `Episodio ${index + 1}`;
+                    link.onclick = (e) => {
+                        e.preventDefault();
+                        videoEmbed.src = ep.url; // Cambia el video
+                        copyInputVideo.value = ep.url; // Cambia la URL a copiar
+                    };
+                    li.appendChild(link);
+                    episodeList.appendChild(li);
+                });
             }
         }
     </script>
