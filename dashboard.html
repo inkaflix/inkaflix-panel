@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administración</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
 
@@ -51,14 +51,17 @@
                 </div>
 
                 <div class="input-group tmdb-lookup">
-                    <label for="tmdbId">ID de TMDb (Ej: 635237)</label>
+                    <label for="tmdbSearch">Buscar Contenido en TMDb (Por Título)</label>
                     <div class="tmdb-input-row">
-                        <input type="number" id="tmdbId" placeholder="Introduce el ID de TMDb" required>
-                        <button type="button" class="btn primary small" onclick="fetchTmdbData()">Buscar y Rellenar</button>
+                        <input type="text" id="tmdbSearch" placeholder="Escribe el título (Ej: Dune)" oninput="liveSearchTmdb()">
+                        <input type="hidden" id="tmdbId"> 
+                        <button type="button" class="btn primary small" onclick="fillFormWithTmdbId(document.getElementById('tmdbId').value)" style="display:none;">Buscar y Rellenar</button>
                     </div>
+                    <div id="tmdbResults" class="tmdb-results-dropdown" style="display:none;">
+                        </div>
+                    
                     <p id="tmdbMessage" class="copy-message" style="margin-top: 5px;"></p>
                 </div>
-                
                 <div class="input-group">
                     <label for="contentTitle">Título</label>
                     <input type="text" id="contentTitle" required readonly>
@@ -154,26 +157,111 @@
         // === VARIABLES Y CONSTANTES GLOBALES ===
         // ====================================================================
         const TMDB_API_KEY = '867b27ebb5a72c3f64ee67bc9dd7a794'; 
-        const CONTENT_PER_PAGE = 5; // <<-- LA REGLA DE PAGINACIÓN: 10 ELEMENTOS
+        const CONTENT_PER_PAGE = 5; 
         let currentPage = 1;
-        let allContent = []; // Almacenará todo el contenido cargado de Firebase
+        let allContent = []; 
+        let searchTimeout; // Para el Live Search de TMDb
 
         const contentForm = document.getElementById('contentForm');
         
         // ====================================================================
-        // === FUNCIÓN DE BÚSQUEDA EN TMDB ===
+        // === FUNCIONES DE BÚSQUEDA EN TMDB POR TÍTULO (NUEVAS) ===
         // ====================================================================
-        async function fetchTmdbData() {
-            const tmdbId = document.getElementById('tmdbId').value;
-            const tmdbType = document.getElementById('tmdbType').value;
-            const messageElement = document.getElementById('tmdbMessage');
+        
+        /**
+         * Inicia la búsqueda en tiempo real al escribir en el campo.
+         */
+        function liveSearchTmdb() {
+            const tmdbSearch = document.getElementById('tmdbSearch').value;
+            const tmdbResults = document.getElementById('tmdbResults');
+            
+            clearTimeout(searchTimeout);
 
-            if (!tmdbId || !tmdbType) {
-                messageElement.textContent = "ID o Tipo (Película/Serie) faltante.";
-                messageElement.style.color = '#d9534f';
+            if (tmdbSearch.length < 3) {
+                tmdbResults.style.display = 'none';
+                tmdbResults.innerHTML = '';
                 return;
             }
 
+            searchTimeout = setTimeout(() => {
+                performTmdbSearch(tmdbSearch);
+            }, 500);
+        }
+
+        /**
+         * Realiza la llamada a la API de búsqueda de TMDb.
+         */
+        async function performTmdbSearch(query) {
+            const tmdbType = document.getElementById('tmdbType').value;
+            const tmdbResults = document.getElementById('tmdbResults');
+            
+            tmdbResults.innerHTML = '<div style="padding: 10px;">Buscando...</div>';
+            tmdbResults.style.display = 'block';
+
+            try {
+                const url = `https://api.themoviedb.org/3/search/${tmdbType}?api_key=${TMDB_API_KEY}&language=es-ES&query=${encodeURIComponent(query)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                renderTmdbResults(data.results);
+
+            } catch (error) {
+                console.error('Error searching TMDb:', error);
+                tmdbResults.innerHTML = '<div style="padding: 10px; color: #d9534f;">Error de red al buscar.</div>';
+            }
+        }
+
+        /**
+         * Renderiza los resultados de la búsqueda en el dropdown.
+         */
+        function renderTmdbResults(results) {
+            const tmdbResults = document.getElementById('tmdbResults');
+            tmdbResults.innerHTML = '';
+            
+            if (results.length === 0) {
+                tmdbResults.innerHTML = '<div style="padding: 10px;">No se encontraron resultados.</div>';
+                return;
+            }
+
+            results.slice(0, 10).forEach(item => { 
+                const isMovie = item.media_type === 'movie' || document.getElementById('tmdbType').value === 'movie';
+                const title = item.title || item.name || 'Título Desconocido';
+                const releaseDate = isMovie ? item.release_date : item.first_air_date;
+                const year = releaseDate ? new Date(releaseDate).getFullYear() : 'N/A';
+                const posterPath = item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : 'https://via.placeholder.com/40x60?text=No+Img';
+                const itemId = item.id;
+                
+                const div = document.createElement('div');
+                div.className = 'tmdb-result-item';
+                div.onclick = () => fillFormWithTmdbId(itemId); 
+                
+                div.innerHTML = `
+                    <img src="${posterPath}" alt="${title}" onerror="this.onerror=null;this.src='https://via.placeholder.com/40x60?text=No+Img'">
+                    <div class="info">
+                        <h4>${title}</h4>
+                        <p>(${year}) - ${isMovie ? 'Película' : 'Serie'}</p>
+                    </div>
+                `;
+                tmdbResults.appendChild(div);
+            });
+        }
+
+        /**
+         * Rellena el formulario usando el ID de TMDb seleccionado.
+         */
+        async function fillFormWithTmdbId(tmdbId) {
+            const tmdbType = document.getElementById('tmdbType').value;
+            const messageElement = document.getElementById('tmdbMessage');
+            const tmdbResults = document.getElementById('tmdbResults');
+
+            tmdbResults.style.display = 'none';
+            tmdbResults.innerHTML = '';
+            document.getElementById('tmdbSearch').value = ''; 
+            document.getElementById('tmdbId').value = tmdbId; 
+
+            messageElement.textContent = "Buscando datos de TMDb...";
+            messageElement.style.color = '#333';
+            
             try {
                 const url = `https://api.themoviedb.org/3/${tmdbType.toLowerCase()}/${tmdbId}?api_key=${TMDB_API_KEY}&language=es-ES`;
                 const response = await fetch(url);
@@ -200,10 +288,20 @@
                 }
             } catch (error) {
                 console.error('Error fetching TMDB data:', error);
-                messageElement.textContent = '❌ Error de red al consultar TMDB.';
+                messageElement.textContent = '❌ Error de red al consultar TMDb.';
                 messageElement.style.color = '#d9534f';
             }
         }
+
+        // ====================================================================
+        // === FUNCIÓN DE BÚSQUEDA EN TMDB (Antigua, ahora usa fillFormWithTmdbId si fuera necesario) ===
+        // ====================================================================
+        /* Ya no se usa directamente desde el HTML, pero es bueno saber cómo estaba antes
+        async function fetchTmdbData() {
+            const tmdbId = document.getElementById('tmdbId').value;
+            fillFormWithTmdbId(tmdbId); 
+        }
+        */
 
         // ====================================================================
         // === FUNCIONES DE MODAL Y UTILIDAD ===
@@ -214,6 +312,11 @@
             document.getElementById('tmdbMessage').textContent = '';
             document.getElementById('episodesContainer').innerHTML = '';
             
+            // Limpieza específica para el Live Search
+            document.getElementById('tmdbResults').style.display = 'none';
+            document.getElementById('tmdbSearch').value = '';
+            // Fin de limpieza
+
             document.getElementById('contentId').value = ''; 
 
             if (content) {
@@ -231,7 +334,7 @@
                 document.getElementById('contentDate').value = content.fecha || '';
                 
                 document.getElementById('embedUrl').value = content.embedUrl || '';
-                document.getElementById('tmdbId').value = content.tmdbId || '';
+                document.getElementById('tmdbId').value = content.tmdbId || ''; // Necesario si queremos que mantenga el ID original en edición
 
                 if (content.tipo === 'Serie' && content.episodios) {
                     content.episodios.forEach(ep => addEpisodeInput(ep));
@@ -327,7 +430,7 @@
 
             contentArray.forEach(content => {
                 const div = document.createElement('div');
-                div.className = 'content-item'; // Clase corregida para coincidir con CSS
+                div.className = 'content-item'; 
                 div.innerHTML = `
                     <div class="content-image-box"> <img src="${content.portadaUrl}" alt="${content.titulo}" onerror="this.onerror=null;this.src='https://via.placeholder.com/150x225?text=No+Poster'">
                         <span class="content-type-badge">${content.tipo}</span>
@@ -355,7 +458,6 @@
 
             if (totalPages <= 1) return; 
 
-            // Botón Anterior
             const prevBtn = document.createElement('button');
             prevBtn.className = 'pagination-btn';
             prevBtn.textContent = '« Anterior';
@@ -363,7 +465,6 @@
             prevBtn.onclick = () => loadContent(currentPage - 1);
             paginationControls.appendChild(prevBtn);
 
-            // Páginas (Muestra hasta 5 botones)
             let startPage = Math.max(1, currentPage - 2);
             let endPage = Math.min(totalPages, currentPage + 2);
             if (endPage - startPage < 4) {
@@ -379,7 +480,6 @@
                 paginationControls.appendChild(pageBtn);
             }
 
-            // Botón Siguiente
             const nextBtn = document.createElement('button');
             nextBtn.className = 'pagination-btn';
             nextBtn.textContent = 'Siguiente »';
@@ -398,7 +498,6 @@
             contentList.innerHTML = '<p class="loading-message">Cargando contenido de la nube...</p>';
 
             try {
-                // 1. OBTENER TODOS LOS DATOS DE FIREBASE (Para paginar en el cliente)
                 const snapshot = await contentCollection.orderBy('id', 'desc').get();
                 allContent = [];
                 snapshot.forEach(doc => {
@@ -410,7 +509,6 @@
                 return;
             }
 
-            // 2. APLICAR FILTROS
             const searchTitle = document.getElementById('searchTitle').value.toLowerCase();
             const typeFilter = document.getElementById('typeFilter').value;
 
@@ -424,7 +522,6 @@
                 return (titleMatch || genreMatch) && typeMatch;
             });
 
-            // 3. PAGINACIÓN Y RENDERIZADO
             const startIndex = (page - 1) * CONTENT_PER_PAGE;
             const endIndex = startIndex + CONTENT_PER_PAGE;
             const paginatedContent = filteredContent.slice(startIndex, endIndex);
@@ -444,7 +541,6 @@
 
             const firebaseId = document.getElementById('contentId').value; 
 
-            // 1. Recolección de datos
             const contentType = document.getElementById('contentType').value; 
             const title = document.getElementById('contentTitle').value.trim();
             const embedUrl = document.getElementById('embedUrl').value.trim();
@@ -456,7 +552,6 @@
                 return;
             }
             
-            // Validar URL de Embed si es Película o si es Serie y la URL principal se usa como trailer
             if (contentType === 'Película' && !embedUrl) {
                 alert('La URL de Embed de la Película es obligatoria.');
                 saveButton.disabled = false;
@@ -495,12 +590,10 @@
 
             try {
                 if (firebaseId) {
-                    // 2. EDITAR (Update)
                     delete contentData.id; 
                     await contentCollection.doc(firebaseId).update(contentData);
                     alert('Contenido actualizado correctamente en Firebase.');
                 } else {
-                    // 3. NUEVO (Add)
                     contentData.id = Date.now(); 
                     await contentCollection.add(contentData); 
                     alert('Contenido guardado correctamente en Firebase.');
@@ -544,7 +637,7 @@
         }
         
         // ====================================================================
-        // === INICIALIZACIÓN ===
+        // === INICIALIZACIÓN Y LISTENERS ===
         // ====================================================================
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -555,19 +648,20 @@
             
             loadContent(); 
 
-            // Listener para el cambio de tipo de contenido (Película/Serie)
             document.getElementById('tmdbType').addEventListener('change', (e) => {
                 const isSeries = e.target.value === 'tv';
                 
                 document.getElementById('episodesSection').style.display = isSeries ? 'block' : 'none';
                 document.getElementById('singleEmbedUrlGroup').style.display = isSeries ? 'none' : 'block';
                 
-                // Actualiza el campo oculto que usa el formulario para guardar en Firebase
                 document.getElementById('contentType').value = isSeries ? 'Serie' : 'Película';
                 
-                // Si cambiamos de tipo, limpiamos los campos irrelevantes para evitar errores
                 document.getElementById('embedUrl').value = '';
                 document.getElementById('episodesContainer').innerHTML = '';
+                
+                // Limpiar resultados y búsqueda de TMDb al cambiar el tipo
+                document.getElementById('tmdbResults').style.display = 'none';
+                document.getElementById('tmdbSearch').value = '';
 
             });
             
@@ -579,6 +673,7 @@
             const contentModal = document.getElementById('contentModal');
             const videoModal = document.getElementById('videoModal');
             const copyModal = document.getElementById('copyModal');
+            const tmdbResults = document.getElementById('tmdbResults');
 
             if (event.target === contentModal) {
                 closeModal('contentModal');
@@ -589,22 +684,29 @@
              if (event.target === copyModal) {
                 closeModal('copyModal');
             }
+            // Ocultar resultados de TMDb al hacer clic fuera
+            if (event.target !== document.getElementById('tmdbSearch')) {
+                 tmdbResults.style.display = 'none';
+            }
         }
         
         function showVideoModal(embedUrl, title, episodes = []) {
             const videoModal = document.getElementById('videoModal');
             const videoEmbed = document.getElementById('videoEmbed');
             const modalTitle = document.getElementById('videoModalTitle');
+            const episodeListContainer = document.getElementById('episodeListContainer');
             const episodeList = document.getElementById('episodeList');
             const copyInputVideo = document.getElementById('copyInputVideo');
 
             modalTitle.textContent = title;
             videoEmbed.src = embedUrl;
-            copyInputVideo.value = embedUrl; // URL por defecto (película o trailer de serie)
+            copyInputVideo.value = embedUrl; 
             videoModal.style.display = 'block';
             
             episodeList.innerHTML = '';
+            
             if (episodes.length > 0) {
+                episodeListContainer.style.display = 'block';
                 episodes.forEach((ep, index) => {
                     const li = document.createElement('li');
                     const link = document.createElement('a');
@@ -612,12 +714,14 @@
                     link.textContent = ep.titulo || `Episodio ${index + 1}`;
                     link.onclick = (e) => {
                         e.preventDefault();
-                        videoEmbed.src = ep.url; // Cambia el video
-                        copyInputVideo.value = ep.url; // Cambia la URL a copiar
+                        videoEmbed.src = ep.url; 
+                        copyInputVideo.value = ep.url; 
                     };
                     li.appendChild(link);
                     episodeList.appendChild(li);
                 });
+            } else {
+                episodeListContainer.style.display = 'none';
             }
         }
     </script>
