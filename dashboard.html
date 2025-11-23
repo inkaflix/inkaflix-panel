@@ -120,6 +120,9 @@
         <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     
+       <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
     <script>
         // ====================================================================
         // === CONFIGURACIÓN Y CONEXIÓN A FIREBASE (con tus claves) ===
@@ -151,10 +154,9 @@
         const contentForm = document.getElementById('contentForm');
         
         // ====================================================================
-        // === FUNCIÓN DE BÚSQUEDA EN TMDB (SIN CAMBIOS) ===
+        // === FUNCIÓN DE BÚSQUEDA EN TMDB ===
         // ====================================================================
         async function fetchTmdbData() {
-            // ... (Tu función original de fetchTmdbData sigue igual) ...
             const tmdbId = document.getElementById('tmdbId').value;
             const contentType = document.getElementById('contentType').value;
             const messageElement = document.getElementById('tmdbMessage');
@@ -191,7 +193,7 @@
         }
 
         // ====================================================================
-        // === FUNCIONES DE RENDERIZADO Y UTILIDAD (ADAPTADAS) ===
+        // === FUNCIONES DE RENDERIZADO Y UTILIDAD ===
         // ====================================================================
         
         function showContentModal(content = null) {
@@ -231,7 +233,6 @@
         }
 
         function addEpisodeInput(episode = {}) {
-            // ... (Tu función original de addEpisodeInput sigue igual) ...
             const container = document.getElementById('episodesContainer');
             const index = container.children.length + 1;
 
@@ -250,7 +251,6 @@
         }
 
         function renderContent(contentArray) {
-            // ... (Tu función original de renderContent sigue igual, SOLO adaptando los IDs) ...
             const contentList = document.getElementById('contentList');
             contentList.innerHTML = ''; 
 
@@ -284,7 +284,6 @@
         }
         
         function renderPagination(totalItems, itemsPerPage, currentPage) {
-            // ... (Tu función original de renderPagination sigue igual) ...
             const paginationControls = document.getElementById('paginationControls');
             paginationControls.innerHTML = '';
             const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -321,7 +320,7 @@
         }
         
         // ====================================================================
-        // === FUNCIÓN PRINCIPAL DE CARGA (AHORA CON FIREBASE) ===
+        // === FUNCIÓN PRINCIPAL DE CARGA (FIREBASE) ===
         // ====================================================================
 
         async function loadContent(page = 1) {
@@ -329,22 +328,20 @@
             const contentList = document.getElementById('contentList');
             contentList.innerHTML = '<p class="loading-message">Cargando contenido de la nube...</p>';
 
-            // 1. OBTENER TODOS LOS DATOS DE FIREBASE
             try {
-                // Obtenemos todos los documentos, ordenados por el campo 'id' (timestamp)
+                // 1. OBTENER TODOS LOS DATOS DE FIREBASE
                 const snapshot = await contentCollection.orderBy('id', 'desc').get();
                 allContent = [];
                 snapshot.forEach(doc => {
-                    // Importante: Guardamos el ID de Firebase para futuras operaciones (editar/eliminar)
                     allContent.push({ firebaseId: doc.id, ...doc.data() });
                 });
             } catch (error) {
                 console.error("Error al cargar contenido de Firebase:", error);
-                contentList.innerHTML = '<p class="error-message">Error al conectar con la base de datos.</p>';
+                contentList.innerHTML = '<p class="error-message">Error al conectar con la base de datos. (Revisa tus Reglas de Seguridad).</p>';
                 return;
             }
 
-            // 2. APLICAR FILTROS (Misma lógica que antes, pero sobre `allContent`)
+            // 2. APLICAR FILTROS
             const searchTitle = document.getElementById('searchTitle').value.toLowerCase();
             const typeFilter = document.getElementById('typeFilter').value;
 
@@ -352,7 +349,6 @@
                 const titleMatch = content.titulo.toLowerCase().includes(searchTitle);
                 const typeMatch = !typeFilter || content.tipo === typeFilter;
                 
-                // Buscar también en géneros
                 const genresString = content.genres ? content.genres.join(', ').toLowerCase() : '';
                 const genreMatch = genresString.includes(searchTitle);
 
@@ -369,7 +365,7 @@
         }
         
         // ====================================================================
-        // === FUNCIÓN DE GUARDADO (AHORA CON FIREBASE) ===
+        // === FUNCIÓN DE GUARDADO (FIREBASE) ===
         // ====================================================================
 
         contentForm.addEventListener('submit', async (e) => {
@@ -380,42 +376,58 @@
             const contentIdInput = document.getElementById('contentId');
             const firebaseId = contentIdInput.value; // Contiene el ID de Firebase si estamos editando
 
-            // 1. Recolección de datos del formulario (sin cambios)
+            // 1. Recolección de datos
             const contentType = document.getElementById('contentType').value;
+            const title = document.getElementById('contentTitle').value.trim();
+            const embedUrl = document.getElementById('embedUrl').value.trim();
             const genresString = document.getElementById('contentGenres').value;
+
+            // **VALIDACIÓN SIMPLE**
+            if (!title || !embedUrl) {
+                alert('El Título y la URL de Embed son campos obligatorios.');
+                saveButton.disabled = false;
+                return;
+            }
+
             const contentData = {
                 tipo: contentType,
-                titulo: document.getElementById('contentTitle').value,
-                portadaUrl: document.getElementById('posterUrl').value,
-                embedUrl: document.getElementById('embedUrl').value,
-                genres: genresString ? genresString.split(',').map(g => g.trim()) : [],
-                tmdbId: document.getElementById('tmdbId').value,
-                fecha: document.getElementById('contentDate').value
+                titulo: title,
+                portadaUrl: document.getElementById('posterUrl').value.trim(),
+                embedUrl: embedUrl,
+                genres: genresString ? genresString.split(',').map(g => g.trim()).filter(g => g.length > 0) : [],
+                tmdbId: document.getElementById('tmdbId').value.trim(),
+                fecha: document.getElementById('contentDate').value.trim()
             };
 
             if (contentType === 'Serie') {
                 const episodes = [];
                 document.querySelectorAll('.episode-input-group').forEach(group => {
-                    const title = group.querySelector('input[name="episodeTitle"]').value;
-                    const url = group.querySelector('input[name="episodeUrl"]').value;
-                    if (url) {
-                        episodes.push({ titulo: title, url: url });
+                    const episodeUrl = group.querySelector('input[name="episodeUrl"]').value.trim();
+                    if (episodeUrl) {
+                        episodes.push({ 
+                            titulo: group.querySelector('input[name="episodeTitle"]').value.trim(), 
+                            url: episodeUrl 
+                        });
                     }
                 });
                 contentData.episodios = episodes;
+
+                if (episodes.length === 0) {
+                     alert('Debes añadir al menos un episodio para una Serie.');
+                     saveButton.disabled = false;
+                     return;
+                }
             }
 
             try {
                 if (firebaseId) {
                     // 2. EDITAR (Update)
-                    // Elimina el campo 'id' de la actualización si no es necesario (Firestore lo mantiene).
                     delete contentData.id; 
                     await contentCollection.doc(firebaseId).update(contentData);
                     alert('Contenido actualizado correctamente en Firebase.');
                 } else {
                     // 3. NUEVO (Add)
-                    // Añadir un ID basado en timestamp para poder ordenar los nuevos elementos primero
-                    contentData.id = Date.now(); 
+                    contentData.id = Date.now(); // Timestamp para orden
                     await contentCollection.add(contentData); 
                     alert('Contenido guardado correctamente en Firebase.');
                 }
@@ -424,38 +436,29 @@
                 loadContent(); // Refrescar la lista después de guardar
             } catch (error) {
                 console.error("Error al guardar en Firebase: ", error);
-                alert('Hubo un error al guardar el contenido en la nube.');
+                alert('Hubo un error al guardar el contenido en la nube. Revisa la consola para más detalles.');
             } finally {
                 saveButton.disabled = false;
             }
         });
 
         // ====================================================================
-        // === FUNCIÓN DE EDICIÓN (AHORA CON FIREBASE) ===
+        // === FUNCIÓN DE EDICIÓN Y ELIMINACIÓN (FIREBASE) ===
         // ====================================================================
 
         async function editContent(firebaseId) {
-            // 1. Obtener el documento de Firebase usando su ID único
             const doc = await contentCollection.doc(firebaseId).get();
             if (!doc.exists) {
                 alert('Contenido no encontrado en la base de datos.');
                 return;
             }
-            // Creamos un objeto que incluye el ID de Firebase y los datos
             const content = { firebaseId: doc.id, ...doc.data() }; 
-            
-            // 2. Mostrar el modal con los datos cargados
             showContentModal(content);
         }
-
-        // ====================================================================
-        // === FUNCIÓN DE ELIMINACIÓN (AHORA CON FIREBASE) ===
-        // ====================================================================
 
         async function deleteContent(firebaseId) {
             if (confirm('¿Estás seguro de que quieres eliminar este contenido PERMANENTEMENTE de la nube?')) {
                 try {
-                    // Eliminar el documento de Firebase usando su ID
                     await contentCollection.doc(firebaseId).delete();
                     alert('Contenido eliminado de Firebase.');
                     loadContent(); // Refrescar la lista
@@ -467,7 +470,7 @@
         }
         
         // ====================================================================
-        // === INICIALIZACIÓN Y FUNCIONES DE VISTA (SIN CAMBIOS Mayores) ===
+        // === INICIALIZACIÓN ===
         // ====================================================================
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -480,17 +483,19 @@
             // Cargar el contenido de Firebase al iniciar
             loadContent(); 
 
+            // Event Listeners
             document.getElementById('fetchTmdbBtn').addEventListener('click', fetchTmdbData);
             document.getElementById('addEpisodeBtn').addEventListener('click', () => addEpisodeInput());
             document.getElementById('contentType').addEventListener('change', (e) => {
                 document.getElementById('episodesSection').style.display = (e.target.value === 'Serie') ? 'block' : 'none';
             });
+            document.getElementById('searchTitle').addEventListener('input', () => loadContent(1));
+            document.getElementById('typeFilter').addEventListener('change', () => loadContent(1));
         });
 
         // Las demás funciones (showVideoModal, copyEmbedUrl, logout, window.onclick) quedan igual.
         
         function showVideoModal(embedUrl, title, episodes = []) {
-            // ... (Tu función original sigue igual) ...
             const videoModal = document.getElementById('videoModal');
             const videoEmbed = document.getElementById('videoEmbed');
             const modalTitle = document.getElementById('videoModalTitle');
@@ -518,14 +523,12 @@
         }
 
         function showCopyModal(url) {
-            // ... (Tu función original sigue igual) ...
             document.getElementById('copyInput').value = url;
             document.getElementById('copyMessage').textContent = ''; 
             document.getElementById('copyModal').style.display = 'block';
         }
 
         function copyEmbedUrl() {
-            // ... (Tu función original sigue igual) ...
             const urlInput = document.getElementById('copyInput');
             const copyMessage = document.getElementById('copyMessage');
 
